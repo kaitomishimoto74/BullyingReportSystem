@@ -18,3 +18,7 @@
     Already have an account?
     <a href="{{ route('admin.login') }}">Sign in</a>
 </p>
+
+<p>
+    <a href="{{ route('main') }}">Return to Main Screen</a>
+</p>

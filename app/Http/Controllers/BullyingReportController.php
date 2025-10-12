@@ -48,10 +48,10 @@ class BullyingReportController extends Controller
     {
         $report = \App\Models\BullyingReport::where('ticket_id', $request->ticket_id)->first();
 
-        if ($report) {
-            return view('report_status', compact('report'));
-        } else {
-            return redirect()->back()->with('error', 'Ticket ID not found.');
-        }
+        return view('report_check', [
+            'report' => $report,
+            'searched' => true,
+            'error' => $report ? null : 'Report not found.'
+        ]);
     }
 }

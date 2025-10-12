@@ -22,6 +22,16 @@
             Your Ticket ID: <span style="color: blue;">{{ session('ticket_id') }}</span>
         </div>
     @endif
+
+    <div style="background: #007bff; padding: 15px 0; margin-bottom: 30px;">
+        <a href="{{ route('report.form') }}" style="color: #fff; font-weight: bold; margin: 0 30px; text-decoration: none; font-size: 18px;">
+            File Case
+        </a>
+        <a href="{{ route('report.check') }}" style="color: #fff; font-weight: bold; margin: 0 30px; text-decoration: none; font-size: 18px;">
+            Check Report
+        </a>
+    </div>
+
     <form method="POST" action="{{ route('report.submit') }}">
         @csrf
 
@@ -139,10 +149,8 @@
         <button type="submit" class="btn">Submit Report</button>
     </form>
 
-    <h2>Check Report Status</h2>
-    <form method="GET" action="{{ route('report.search') }}" style="margin-bottom: 30px;">
-        <input type="text" name="ticket_id" placeholder="Enter your Ticket ID" required>
-        <button type="submit" class="btn">Search</button>
-    </form>
+    <p style="text-align: center; margin-bottom: 20px;">
+        <a href="{{ route('main') }}" style="color: #007bff; font-weight: bold; text-decoration: none;">Return to Main Screen</a>
+    </p>
 </body>
 </html>

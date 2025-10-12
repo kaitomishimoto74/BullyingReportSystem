@@ -6,7 +6,7 @@ use App\Http\Controllers\AdminDashboardController;
 
 Route::get('/', function () {
     return view('main');
-});
+})->name('main');
 
 Route::get('/login', function () {
     // return view('login'); // Replace with your login view/controller
@@ -41,8 +41,9 @@ Route::get('/admin/reports', [App\Http\Controllers\AdminDashboardController::cla
 
 Route::get('/admin/report/{id}/preview', [App\Http\Controllers\AdminDashboardController::class, 'preview'])->name('admin.report.preview');
 Route::post('/admin/report/{id}/work', [App\Http\Controllers\AdminDashboardController::class, 'work'])->name('admin.report.work');
+Route::post('/admin/report/{id}/complete', [App\Http\Controllers\AdminDashboardController::class, 'complete'])->name('admin.report.complete');
 
-Route::get('/admin/work', [AdminDashboardController::class, 'workList'])
+Route::get('/admin/work', [App\Http\Controllers\AdminDashboardController::class, 'workList'])
     ->middleware('auth')
     ->name('admin.work');
 
@@ -50,3 +51,7 @@ Route::post('/admin/logout', function () {
     Auth::logout();
     return redirect()->route('admin.login');
 })->name('admin.logout');
+
+Route::get('/report/check', function () {
+    return view('report_check');
+})->name('report.check');

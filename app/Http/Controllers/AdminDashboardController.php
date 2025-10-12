@@ -57,4 +57,13 @@ class AdminDashboardController extends Controller
         $reports = \App\Models\BullyingReport::where('worked_by', auth()->id())->get();
         return view('admin_work', compact('reports'));
     }
+    public function complete($id)
+    {
+        $report = \App\Models\BullyingReport::findOrFail($id);
+        if ($report->worked_by == auth()->id()) {
+            $report->status = 'Completed';
+            $report->save();
+        }
+        return redirect()->route('admin.work');
+    }
 }
