@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\BullyingReportController;
+use App\Http\Controllers\AdminDashboardController;
 
 Route::get('/', function () {
     return view('main');
@@ -37,6 +38,13 @@ Route::get('/admin/dashboard', [App\Http\Controllers\AdminDashboardController::c
 Route::get('/admin/reports', [App\Http\Controllers\AdminDashboardController::class, 'reports'])
     ->middleware('auth')
     ->name('admin.reports');
+
+Route::get('/admin/report/{id}/preview', [App\Http\Controllers\AdminDashboardController::class, 'preview'])->name('admin.report.preview');
+Route::post('/admin/report/{id}/work', [App\Http\Controllers\AdminDashboardController::class, 'work'])->name('admin.report.work');
+
+Route::get('/admin/work', [AdminDashboardController::class, 'workList'])
+    ->middleware('auth')
+    ->name('admin.work');
 
 Route::post('/admin/logout', function () {
     Auth::logout();

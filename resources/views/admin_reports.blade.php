@@ -9,28 +9,30 @@
         <button type="submit" name="status" value="Completed" class="filter-btn">Completed</button>
     </form>
 
-    <table>
-        <thead>
-            <tr>
-                <!-- Example table header -->
-                <th>Ticket ID</th>
-                <th>Victim</th>
-                <th>Offender</th>
-                <th>Status</th>
-                <th>Date</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach($reports as $report)
-                <!-- Example table body -->
-                <tr>
-                    <td>{{ $report->ticket_id }}</td>
-                    <td>{{ $report->victim_names }}</td>
-                    <td>{{ $report->offender_names }}</td>
-                    <td>{{ $report->status }}</td>
-                    <td>{{ $report->date }}</td>
-                </tr>
-            @endforeach
-        </tbody>
-    </table>
+    <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+        @forelse($reports as $report)
+            <div style="border: 1px solid #ccc; border-radius: 8px; padding: 20px; width: 300px; background: #f9f9f9; position: relative;">
+                <div style="font-weight: bold; font-size: 18px;">Ticket ID: {{ $report->ticket_id }}</div>
+                <div>Status: <span style="color: {{ $report->status == 'Pending' ? '#dc3545' : '#28a745' }};">{{ $report->status }}</span></div>
+                <div style="margin-top: 10px;">
+                    <form method="GET" action="{{ route('admin.report.preview', $report->id) }}" style="display:inline;">
+                        <button type="submit" style="padding: 5px 15px; background: #007bff; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Preview</button>
+                    </form>
+                    <form method="POST" action="{{ route('admin.report.work', $report->id) }}" style="display:inline;">
+                        @csrf
+                        <button type="submit"
+                            style="padding: 5px 15px; background: #28a745; color: #fff; border: none; border-radius: 4px; cursor: pointer;"
+                            {{ $report->worked_by ? 'disabled' : '' }}>
+                            Work
+                        </button>
+                    </form>
+                    @if($report->worked_by)
+                        <span style="color: #888; font-size: 12px;">Already assigned</span>
+                    @endif
+                </div>
+            </div>
+        @empty
+            <div>No reports found.</div>
+        @endforelse
+    </div>
 @endsection

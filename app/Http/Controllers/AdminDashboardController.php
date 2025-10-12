@@ -31,4 +31,30 @@ class AdminDashboardController extends Controller
 
         return view('admin_reports', compact('reports'));
     }
+
+    public function preview($id)
+    {
+        $report = \App\Models\BullyingReport::findOrFail($id);
+        return view('admin_report_preview', compact('report'));
+    }
+
+    public function work($id)
+    {
+        $report = \App\Models\BullyingReport::findOrFail($id);
+
+        // Only allow if not already worked by someone
+        if ($report->worked_by === null) {
+            $report->status = 'Processing';
+            $report->worked_by = auth()->id();
+            $report->save();
+        }
+
+        return redirect()->route('admin.work');
+    }
+
+    public function workList()
+    {
+        $reports = \App\Models\BullyingReport::where('worked_by', auth()->id())->get();
+        return view('admin_work', compact('reports'));
+    }
 }

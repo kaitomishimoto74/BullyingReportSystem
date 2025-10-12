@@ -42,6 +42,7 @@
         <div class="nav-links">
             <a href="{{ route('admin.dashboard') }}">Home</a>
             <a href="{{ route('admin.reports') }}">File Reports</a>
+            <a href="{{ route('admin.work') }}">Work</a>
         </div>
         <div class="user-info">
             Hello, {{ Auth::user()->username ?? 'Admin' }}
