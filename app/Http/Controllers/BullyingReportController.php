@@ -54,4 +54,20 @@ class BullyingReportController extends Controller
             'error' => $report ? null : 'Report not found.'
         ]);
     }
+
+    public function searchJson(Request $request)
+    {
+        $report = \App\Models\BullyingReport::where('ticket_id', $request->ticket_id)->first();
+        if (!$report) {
+            return response()->json([], 404);
+        }
+        $assigned_username = null;
+        if ($report->worked_by) {
+            $user = \App\Models\User::find($report->worked_by);
+            $assigned_username = $user ? $user->username : null;
+        }
+        $data = $report->toArray();
+        $data['assigned_username'] = $assigned_username;
+        return response()->json($data);
+    }
 }

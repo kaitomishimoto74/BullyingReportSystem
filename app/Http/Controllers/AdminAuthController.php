@@ -25,7 +25,7 @@ class AdminAuthController extends Controller
         $user = \App\Models\User::create($data);
 
         // Redirect to login page after registration
-        return redirect()->route('admin.login')->with('success', 'Registration successful! Please sign in.');
+        return redirect()->route('main')->with('success', 'Registration successful! You may now log in.');
     }
 
     public function login(Request $request)
@@ -42,5 +42,6 @@ class AdminAuthController extends Controller
         }
 
         return back()->with('error', 'Invalid credentials.');
+        return back()->with('register_error', 'Username or email already exists.');
     }
 }

@@ -57,13 +57,62 @@ class AdminDashboardController extends Controller
         $reports = \App\Models\BullyingReport::where('worked_by', auth()->id())->get();
         return view('admin_work', compact('reports'));
     }
-    public function complete($id)
+    public function complete(Request $request, $id)
     {
         $report = \App\Models\BullyingReport::findOrFail($id);
         if ($report->worked_by == auth()->id()) {
             $report->status = 'Completed';
             $report->save();
+            return redirect()->route('admin.report.preview', ['id' => $report->id])
+                ->with('success', 'Report marked as completed!');
         }
-        return redirect()->route('admin.work');
+        return redirect()->back()->with('error', 'You are not assigned to this report.');
+    }
+    public function reportsJson(Request $request)
+    {
+        $query = \App\Models\BullyingReport::query();
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where('ticket_id', 'like', "%$search%")
+                  ->orWhere('victim_names', 'like', "%$search%")
+                  ->orWhere('offender_names', 'like', "%$search%");
+        }
+
+        if ($request->filled('status') && $request->status !== 'All') {
+            $query->where('status', $request->status);
+        }
+
+        $reports = $query->orderBy('created_at', 'desc')->get();
+
+        return response()->json($reports);
+    }
+    public function workReportsJson(Request $request)
+    {
+        $reports = \App\Models\BullyingReport::where('worked_by', auth()->id())->orderBy('created_at', 'desc')->get();
+        return response()->json($reports);
+    }
+    public function previewJson($id)
+    {
+        $report = \App\Models\BullyingReport::findOrFail($id);
+        $assigned_username = null;
+        if ($report->worked_by) {
+            $user = \App\Models\User::find($report->worked_by);
+            $assigned_username = $user ? $user->username : null;
+        }
+        $data = $report->toArray();
+        $data['assigned_username'] = $assigned_username;
+        return response()->json($data);
+    }
+
+    public function completeJson(Request $request, $id)
+    {
+        $report = \App\Models\BullyingReport::findOrFail($id);
+        if ($report->worked_by == auth()->id()) {
+            $report->status = 'Completed';
+            $report->save();
+            return response()->json(['success' => true, 'status' => 'Completed']);
+        }
+        return response()->json(['success' => false], 403);
     }
 }
