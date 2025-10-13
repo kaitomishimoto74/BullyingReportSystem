@@ -6,6 +6,8 @@
         <p><strong>Ticket ID:</strong> {{ $report->ticket_id }}</p>
         <p><strong>Status:</strong> {{ $report->status }}</p>
         <p><strong>Date:</strong> {{ $report->date }}</p>
+        <p><strong>Reporter Phone:</strong> {{ $report->reporter_phone ?? 'N/A' }}</p>
+        <p><strong>Reporter Email:</strong> {{ $report->reporter_email ?? 'N/A' }}</p>        
         @if($report->worked_by)
             <p><strong>Assigned to:</strong>
                 {{ \App\Models\User::find($report->worked_by)->username ?? 'Unknown' }}

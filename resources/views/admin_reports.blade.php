@@ -5,6 +5,7 @@
     <form method="GET" action="{{ route('admin.reports') }}" class="search-bar" style="display: flex; gap: 10px; margin-bottom: 20px;">
         <input type="text" name="search" placeholder="Search by Ticket ID, Victim, Offender, etc." value="{{ request('search') }}">
         <button type="submit">Search</button>
+        <button type="submit" name="status" value="All" class="filter-btn">All</button>
         <button type="submit" name="status" value="Pending" class="filter-btn">Pending</button>
         <button type="submit" name="status" value="Processing" class="filter-btn">Processing</button>
         <button type="submit" name="status" value="Completed" class="filter-btn">Completed</button>

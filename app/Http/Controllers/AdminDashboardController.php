@@ -9,7 +9,7 @@ class AdminDashboardController extends Controller
 {
     public function index()
     {
-        return view('admin_dashboard');
+        return view('admin_home');
     }
 
     public function reports(Request $request)
@@ -23,7 +23,7 @@ class AdminDashboardController extends Controller
                   ->orWhere('offender_names', 'like', "%$search%");
         }
 
-        if ($request->filled('status')) {
+        if ($request->filled('status') && $request->status !== 'All') {
             $query->where('status', $request->status);
         }
 
