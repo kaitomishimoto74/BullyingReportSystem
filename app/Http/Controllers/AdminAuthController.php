@@ -17,14 +17,12 @@ class AdminAuthController extends Controller
             'username' => 'required|string|unique:users,username',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:6',
-            'name' => 'nullable|string',
         ]);
 
         $data['name'] = $data['first_name'] . ' ' . $data['last_name'];
-        $data['password'] = \Hash::make($data['password']);
-        $user = \App\Models\User::create($data);
+        $data['password'] = Hash::make($data['password']);
+        $user = User::create($data);
 
-        // Redirect to login page after registration
         return redirect()->route('main')->with('success', 'Registration successful! You may now log in.');
     }
 
@@ -42,6 +40,5 @@ class AdminAuthController extends Controller
         }
 
         return back()->with('error', 'Invalid credentials.');
-        return back()->with('register_error', 'Username or email already exists.');
     }
 }

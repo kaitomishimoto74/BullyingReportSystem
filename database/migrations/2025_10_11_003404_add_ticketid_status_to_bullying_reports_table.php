@@ -11,10 +11,23 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('bullying_reports', function (Blueprint $table) {
-            $table->string('ticket_id')->unique()->after('id');
-            $table->string('status')->default('Pending')->after('victim_spoken_to');
-        });
+        if (! Schema::hasTable('bullying_reports')) {
+            return;
+        }
+
+        // add ticket_id only if missing
+        if (! Schema::hasColumn('bullying_reports', 'ticket_id')) {
+            Schema::table('bullying_reports', function (Blueprint $table) {
+                $table->string('ticket_id')->unique()->after('id');
+            });
+        }
+
+        // add status only if missing
+        if (! Schema::hasColumn('bullying_reports', 'status')) {
+            Schema::table('bullying_reports', function (Blueprint $table) {
+                $table->string('status')->default('Pending')->after('victim_spoken_to');
+            });
+        }
     }
 
     /**
@@ -22,8 +35,20 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('bullying_reports', function (Blueprint $table) {
-            $table->dropColumn(['ticket_id', 'status']);
-        });
+        if (! Schema::hasTable('bullying_reports')) {
+            return;
+        }
+
+        if (Schema::hasColumn('bullying_reports', 'ticket_id')) {
+            Schema::table('bullying_reports', function (Blueprint $table) {
+                $table->dropColumn('ticket_id');
+            });
+        }
+
+        if (Schema::hasColumn('bullying_reports', 'status')) {
+            Schema::table('bullying_reports', function (Blueprint $table) {
+                $table->dropColumn('status');
+            });
+        }
     }
 };

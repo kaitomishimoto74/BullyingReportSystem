@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('bullying_reports', function (Blueprint $table) {
             $table->id();
-            $table->string('ticket_id')->primary();
+            $table->string('ticket_id')->unique();
             $table->date('date');
             $table->string('reporter_name');
             $table->string('reporter_phone')->nullable();
