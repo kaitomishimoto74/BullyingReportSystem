@@ -16,6 +16,7 @@ Route::get('/report_form', function () {
     return view('report_form');
 })->name('report.form');
 
+// POST route for file case (ensure this exists)
 Route::post('/report', [BullyingReportController::class, 'store'])->name('report.submit');
 Route::get('/report/search', [App\Http\Controllers\BullyingReportController::class, 'searchJson']);
 

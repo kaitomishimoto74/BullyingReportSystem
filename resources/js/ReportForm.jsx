@@ -1,9 +1,103 @@
 import React, { useState } from 'react';
 
 function FileCaseForm() {
+  const [victims, setVictims] = useState(['']);
+  const [offenders, setOffenders] = useState(['']);
+  const [reporterType, setReporterType] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [ticketId, setTicketId] = useState('');
+  const reporterOptions = [
+    'Student',
+    'Parent/guardian',
+    'Close adult relative',
+    'School staff',
+    'Witness/bystander'
+  ];
+
+  const addVictim = () => setVictims(prev => [...prev, '']);
+  const removeVictim = (i) => setVictims(prev => prev.filter((_, idx) => idx !== i));
+  const updateVictim = (i, val) => setVictims(prev => prev.map((v, idx) => idx === i ? val : v));
+
+  const addOffender = () => setOffenders(prev => [...prev, '']);
+  const removeOffender = (i) => setOffenders(prev => prev.filter((_, idx) => idx !== i));
+  const updateOffender = (i, val) => setOffenders(prev => prev.map((o, idx) => idx === i ? val : o));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setSuccessMessage('');
+    setTicketId('');
+
+    try {
+      const form = e.target;
+      const fd = new FormData(form);
+
+      // convert victim_names[] inputs to a single string field "victim_names"
+      const victimList = victims.map(v => v.trim()).filter(Boolean).join(', ');
+      if (fd.has('victim_names[]')) {
+        fd.delete('victim_names[]');
+      }
+      if (victimList) {
+        fd.append('victim_names', victimList);
+      }
+
+      // convert offender_names[] inputs to a single string field "offender_names"
+      const offenderList = offenders.map(o => o.trim()).filter(Boolean).join(', ');
+      if (fd.has('offender_names[]')) {
+        fd.delete('offender_names[]');
+      }
+      if (offenderList) {
+        fd.append('offender_names', offenderList);
+      }
+
+      const res = await fetch('/report', {
+        method: 'POST',
+        body: fd,
+        headers: {
+          'X-CSRF-TOKEN': window.Laravel?.csrfToken || '',
+          'Accept': 'application/json'
+        },
+        credentials: 'same-origin'
+      });
+
+      // If server redirected to a blade page, follow redirect (optional)
+      if (res.redirected) {
+        window.location.href = res.url;
+        return;
+      }
+
+      const data = await res.json();
+
+      if (data && data.success) {
+        // accept common variations of ticket id key
+        const id = data.ticket_id ?? data.ticketId ?? data.ticket ?? data.id;
+        setSuccessMessage(data.message ?? 'Report submitted successfully.');
+        if (id) setTicketId(id);
+        // optionally set global for legacy code
+        window.reportSuccess = { message: data.message ?? 'Report submitted successfully.', ticketId: id };
+        // optionally clear form fields here (not implemented)
+      } else {
+        setSuccessMessage(data.message ?? 'Submission failed.');
+      }
+    } catch (err) {
+      setSuccessMessage('Submission failed. Check console/network for details.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <form method="POST" action="/report" style={{ background: '#f9f9f9', borderRadius: '8px', padding: '30px', maxWidth: '800px', margin: '0 auto', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-      <input type="hidden" name="_token" value={window.Laravel.csrfToken} />
+    <form onSubmit={handleSubmit} encType="multipart/form-data" style={{ background: '#f9f9f9', borderRadius: '8px', padding: '30px', maxWidth: '800px', margin: '0 auto', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+      <input type="hidden" name="_token" value={window.Laravel?.csrfToken} />
+
+      {successMessage && (
+        <div style={{ color: 'green', fontWeight: 'bold', marginBottom: 12 }}>
+          {successMessage}
+          {ticketId && (<div>Your Ticket ID: <strong style={{ color: 'blue' }}>{ticketId}</strong></div>)}
+        </div>
+      )}
 
       <div className="form-section row" style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
         <div style={{ flex: 1 }}>
@@ -28,53 +122,73 @@ function FileCaseForm() {
             <input type="email" name="reporter_email" id="reporter_email" />
           </div>
         </div>
-        <div className="checkbox-group" style={{ marginTop: '10px', display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
-          <div style={{ flex: '1 1 200px' }}>
-            <label><input type="checkbox" name="reporter_type[]" value="Student" /> Student</label>
-          </div>
-          <div style={{ flex: '1 1 200px' }}>
-            <label><input type="checkbox" name="reporter_type[]" value="Parent/guardian" /> Parent/guardian</label>
-          </div>
-          <div style={{ flex: '1 1 200px' }}>
-            <label><input type="checkbox" name="reporter_type[]" value="Close adult relative" /> Close adult relative</label>
-          </div>
-          <div style={{ flex: '1 1 200px' }}>
-            <label><input type="checkbox" name="reporter_type[]" value="School staff" /> School staff</label>
-          </div>
-          <div style={{ flex: '1 1 200px' }}>
-            <label><input type="checkbox" name="reporter_type[]" value="Witness/bystander" /> Witness/bystander</label>
-          </div>
+
+        <div className="radio-group" style={{ marginTop: '10px', display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
+          {reporterOptions.map(opt => (
+            <label key={opt} style={{ flex: '1 1 200px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="radio"
+                name="reporter_type[]"
+                value={opt}
+                checked={reporterType === opt}
+                onChange={(e) => setReporterType(e.target.value)}
+                required
+              />
+              <span>{opt}</span>
+            </label>
+          ))}
         </div>
       </div>
 
       <div className="form-section" style={{ marginBottom: '20px' }}>
         <h3>Name of Victim(s)</h3>
-        <input type="text" name="victim_names" required />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {victims.map((v, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="text"
+                name="victim_names[]"
+                placeholder={i === 0 ? 'Primary victim name' : 'Additional victim name'}
+                value={v}
+                onChange={e => updateVictim(i, e.target.value)}
+                style={{ flex: 1, padding: '8px 10px', borderRadius: 6, border: '1px solid #ccc' }}
+                required={i === 0}
+              />
+              {victims.length > 1 && (
+                <button type="button" onClick={() => removeVictim(i)} style={{ padding: '6px 10px' }}>
+                  Remove
+                </button>
+              )}
+            </div>
+          ))}
+          <div>
+            <button type="button" onClick={addVictim} style={{ padding: '8px 12px' }}>Add Victim</button>
+          </div>
+        </div>
       </div>
 
       <div className="form-section" style={{ marginBottom: '20px' }}>
         <h3>Name(s) of Alleged Offender(s)</h3>
-        <div className="row" style={{ display: 'flex', gap: '10px' }}>
-          <div style={{ flex: 1 }}>
-            <label htmlFor="offender_names">Name(s)</label>
-            <input type="text" name="offender_names" id="offender_names" />
-          </div>
-          <div style={{ flex: 1 }}>
-            <label htmlFor="offender_age">Age</label>
-            <select name="offender_age" id="offender_age">
-              <option value="">Select age</option>
-              <option value="Unknown">Unknown</option>
-              {[...Array(21)].map((_, i) => (
-                <option key={i+5} value={i+5}>{i+5}</option>
-              ))}
-            </select>
-          </div>
-          <div style={{ flex: 1 }}>
-            <label>Is he/she a student?</label>
-            <select name="offender_is_student">
-              <option value="Yes">Yes</option>
-              <option value="No">No</option>
-            </select>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {offenders.map((o, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="text"
+                name="offender_names[]"
+                placeholder={i === 0 ? 'Alleged offender name' : 'Additional offender name'}
+                value={o}
+                onChange={e => updateOffender(i, e.target.value)}
+                style={{ flex: 1, padding: '8px 10px', borderRadius: 6, border: '1px solid #ccc' }}
+              />
+              {offenders.length > 1 && (
+                <button type="button" onClick={() => removeOffender(i)} style={{ padding: '6px 10px' }}>
+                  Remove
+                </button>
+              )}
+            </div>
+          ))}
+          <div>
+            <button type="button" onClick={addOffender} style={{ padding: '8px 12px' }}>Add Offender</button>
           </div>
         </div>
       </div>
@@ -136,7 +250,7 @@ function FileCaseForm() {
         <div className="checkbox-group">
           <label><input type="checkbox" name="victim_spoken_to[]" value="Parent/Guardian" /> Parent/Guardian</label>
           <label><input type="checkbox" name="victim_spoken_to[]" value="Teacher" /> Teacher</label>
-          <label><input type="checkbox" name="victim_spoken_to[]" value="School Counselor" /> School Counselor</label>
+          <label><input type="checkbox" name="victim_spoken_to[]" value="School Counselor" /> School/School Counselor</label>
           <label><input type="checkbox" name="victim_spoken_to[]" value="Principal" /> Principal</label>
           <label><input type="checkbox" name="victim_spoken_to[]" value="Friend" /> Friend</label>
           <label><input type="checkbox" name="victim_spoken_to[]" value="Police" /> Police</label>
@@ -144,8 +258,8 @@ function FileCaseForm() {
         </div>
       </div>
 
-      <button type="submit" className="btn" style={{ padding: '10px 30px', fontSize: '16px', background: '#28a745', color: '#fff', border: 'none', cursor: 'pointer' }}>
-        Submit Report
+      <button type="submit" disabled={loading} className="btn" style={{ padding: '10px 30px', fontSize: '16px', background: '#28a745', color: '#fff', border: 'none', cursor: 'pointer' }}>
+        {loading ? 'Submitting...' : 'Submit Report'}
       </button>
     </form>
   );
@@ -202,10 +316,16 @@ function CheckReportForm() {
           <p>Status: <strong>{result.status ?? 'Pending'}</strong></p>
           <p>Date: <strong>{result.date}</strong></p>
           <p>
-            Assigned to: <strong>
-              {result.assigned_username
-                ? result.assigned_username
-                : (result.worked_by ? 'Unknown' : 'Not yet assigned')}
+            <strong>Assigned to:</strong>{' '}
+            <strong>
+              {result.assigned_fullname
+                ? result.assigned_fullname
+                : result.assigned_name
+                  ? result.assigned_name
+                  : (result.assigned_first_name && result.assigned_last_name)
+                    ? `${result.assigned_first_name} ${result.assigned_last_name}`
+                    : (result.assigned_username || (result.worked_by ? 'Unknown' : 'Not yet assigned'))
+              }
             </strong>
           </p>
         </div>
@@ -216,19 +336,10 @@ function CheckReportForm() {
 
 export default function ReportForm() {
   const [activeTab, setActiveTab] = useState('file');
-  const successMessage = window.reportSuccess?.message;
-  const ticketId = window.reportSuccess?.ticketId;
 
   return (
     <div style={{ fontFamily: 'Arial, sans-serif', margin: '40px' }}>
       <h1 style={{ textAlign: 'center', marginBottom: '40px', color: '#007bff' }}>Bullying Reporting Incident Form</h1>
-
-      {successMessage && (
-        <div style={{ color: 'green', fontWeight: 'bold', textAlign: 'center', marginBottom: '20px' }}>
-          {successMessage}<br />
-          Your Ticket ID: <span style={{ color: 'blue' }}>{ticketId}</span>
-        </div>
-      )}
 
       <div style={{ background: '#007bff', padding: '15px 0', marginBottom: '30px', textAlign: 'center' }}>
         <button
