@@ -11,19 +11,20 @@ class BullyingReportController extends Controller
 {
     public function store(Request $request)
     {
-        // validate important fields (adjust rules as needed)
+        // validate important fields
         $validator = Validator::make($request->all(), [
             'date' => 'required|date',
-            'reporter_name' => 'required|string|max:255',
-            'reporter_phone' => 'nullable|string|max:255',
+            // reporter_name no longer required; SPA provides reporter_school_id
+            'reporter_school_id' => 'required|string|max:255',
+            'reporter_phone' => 'nullable|digits:11',
             'reporter_email' => 'nullable|email|max:255',
-            'victim_names' => 'required|string',         // we convert array -> string in React
+            'victim_names' => 'required|string',
             'offender_names' => 'nullable|string',
             'bullying_type' => 'nullable|array',
             'bullying_explanation' => 'nullable|string',
             'bullying_location' => 'nullable|array',
             'victim_spoken_to' => 'nullable|array',
-            'reporter_type' => 'nullable|array',         // you send as reporter_type[]
+            'reporter_type' => 'nullable|array',
         ]);
 
         if ($validator->fails()) {
@@ -33,7 +34,7 @@ class BullyingReportController extends Controller
             return back()->withErrors($validator)->withInput();
         }
 
-        // generate unique ticket id in format: TMC-YYYYMMDDHHMMSS-#### (e.g. TMC-20251022145407-7133)
+        // generate unique ticket id
         do {
             $ticketId = 'TMC-' . date('YmdHis') . '-' . mt_rand(1000, 9999);
         } while (BullyingReport::where('ticket_id', $ticketId)->exists());
@@ -42,14 +43,27 @@ class BullyingReportController extends Controller
         $report = new BullyingReport();
         $report->ticket_id = $ticketId;
         $report->date = $request->input('date');
-        $report->reporter_name = $request->input('reporter_name');
-        $report->reporter_phone = $request->input('reporter_phone');
-        $report->reporter_email = $request->input('reporter_email');
 
-        // reporter_type comes as array (reporter_type[])
+        $authUser = $request->user();
+        $providedReporterName = $request->input('reporter_name'); // optional if present
+        $providedSchoolId = $request->input('reporter_school_id');
+
+        // set reporter_name: prefer auth user name/email, fall back to provided reporter_name, then school id
+        $report->reporter_name = $authUser
+            ? ($authUser->name ?? $authUser->email)
+            : ($providedReporterName ?? $providedSchoolId);
+
+        // set phone and email (use auth email if not provided)
+        $report->reporter_phone = $request->input('reporter_phone');
+        $report->reporter_email = $request->input('reporter_email') ?? ($authUser ? $authUser->email : null);
+
+        // persist school id if your reports table has column; uncomment if column exists:
+        // $report->reporter_school_id = $providedSchoolId;
+        // or map to school_id if present:
+        // $report->school_id = $providedSchoolId;
+
         $report->reporter_type = $request->input('reporter_type') ? json_encode($request->input('reporter_type')) : null;
 
-        // victim and offender are sent as single strings from React
         $report->victim_names = $request->input('victim_names');
         $report->offender_names = $request->input('offender_names');
 
@@ -59,24 +73,40 @@ class BullyingReportController extends Controller
         $report->bullying_location_other = $request->input('bullying_location_other');
         $report->victim_spoken_to = $request->input('victim_spoken_to') ? json_encode($request->input('victim_spoken_to')) : null;
 
-        // default status (ensure migration has default)
         $report->status = $request->input('status', 'Pending');
 
-        // optional: worked_by left null
         $report->save();
 
-        // Return JSON for React
-        if ($request->wantsJson() || $request->ajax()) {
+        // guide + redirect
+        $guide = [
+            'headline' => 'Report submitted',
+            'steps' => [
+                'Keep your Ticket ID safe. You will need it to check the status.',
+            ],
+            'note' => 'To check the report, click "Check Report" on the left side.'
+        ];
+
+        $redirectUrl = url('/report/search?ticket_id=' . urlencode($ticketId));
+
+        // Return JSON for AJAX only; otherwise redirect to the report page (prevents raw JSON being rendered)
+        $isXhr = $request->ajax() || $request->header('X-Requested-With') === 'XMLHttpRequest';
+        if ($isXhr) {
             return response()->json([
                 'success' => true,
                 'message' => 'Report successfully filed.',
+                'note' => $guide['note'],
                 'ticket_id' => $ticketId,
+                'guide' => $guide,
+                'redirect' => $redirectUrl,
             ], 201);
         }
 
-        // For non-AJAX (blade) fallback
-        return redirect()->back()->with([
-            'reportSuccess' => ['message' => 'Report successfully filed.', 'ticketId' => $ticketId]
+        return redirect($redirectUrl)->with([
+            'reportSuccess' => [
+                'message' => 'Report successfully filed.',
+                'note' => $guide['note'],
+                'ticketId' => $ticketId
+            ]
         ]);
     }
 

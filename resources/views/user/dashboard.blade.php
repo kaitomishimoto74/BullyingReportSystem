@@ -3,28 +3,23 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>User Dashboard</title>
 </head>
-<body style="font-family: Arial, sans-serif; margin: 24px;">
-  <h1>User Dashboard</h1>
-  <p>Welcome, {{ $user->name ?? $user->email }}</p>
+<body>
+  <div id="user-dashboard-root"><!-- React will mount here --></div>
 
-  <div style="margin-top:20px; max-width:420px;">
-    <a
-      href="/report_form"
-      style="
-        display:block;
-        padding:12px 20px;
-        font-size:16px;
-        background:#28a745;
-        color:#fff;
-        border-radius:6px;
-        text-decoration:none;
-        text-align:center;
-      "
-    >
-      File Case
-    </a>
-  </div>
+  <!-- Ensure your main JS bundle includes resources/js/UserDashboard.jsx -->
+  <!-- In resources/js/app.js add: import './UserDashboard.jsx'; then run npm run dev -->
+  @if (class_exists(\Illuminate\Foundation\Vite::class))
+    @vite(['resources/js/app.js'])
+  @else
+    <script src="/js/app.js"></script>
+  @endif
+
+  <script>
+    // inject authenticated user as plain array to the SPA
+    window.CurrentUser = {!! json_encode(optional(auth()->user())->toArray() ?? []) !!};
+  </script>
 </body>
 </html>

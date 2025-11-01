@@ -1,5 +1,12 @@
 import React, { useState } from 'react';
 
+// make sure CSRF token and current user are available in the component
+const csrfToken = (typeof document !== 'undefined' && document.querySelector('meta[name="csrf-token"]'))
+  ? document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+  : (typeof window !== 'undefined' && window.Laravel ? window.Laravel.csrfToken : '');
+
+const currentUser = (typeof window !== 'undefined' && window.CurrentUser) ? window.CurrentUser : {};
+
 function FileCaseForm() {
   const [victims, setVictims] = useState(['']);
   const [offenders, setOffenders] = useState(['']);
@@ -7,6 +14,8 @@ function FileCaseForm() {
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [ticketId, setTicketId] = useState('');
+  const [guide, setGuide] = useState(null);
+  const [redirectUrl, setRedirectUrl] = useState(null);
   const reporterOptions = [
     'Student',
     'Parent/guardian',
@@ -14,6 +23,24 @@ function FileCaseForm() {
     'School staff',
     'Witness/bystander'
   ];
+
+  // simple name validator: allows letters, spaces, hyphen, apostrophe, dot; requires length and a vowel
+  const isValidName = (raw) => {
+    const s = (raw || '').trim();
+    if (s.length < 2 || s.length > 255) return false;
+    // allow many unicode letters, spaces, hyphens, periods, apostrophes
+    const namePattern = /^[\p{L}\p{M}'\-\.\s]+$/u;
+    if (!namePattern.test(s)) return false;
+    // heuristic: require at least one vowel-like character
+    if (!/[aeiouyAEIOUY]/.test(s)) return false;
+    // blacklist obvious nonsense
+    const bad = ['asd','asdf','qwer','test','secret','fake','random','hello','hahaha','lol','admin','user','123','xyz'];
+    const lower = s.toLowerCase();
+    for (const b of bad) if (lower.includes(b)) return false;
+    // disallow long repeated characters
+    if (/(.)\1\1\1/.test(s)) return false;
+    return true;
+  };
 
   const addVictim = () => setVictims(prev => [...prev, '']);
   const removeVictim = (i) => setVictims(prev => prev.filter((_, idx) => idx !== i));
@@ -24,61 +51,111 @@ function FileCaseForm() {
   const updateOffender = (i, val) => setOffenders(prev => prev.map((o, idx) => idx === i ? val : o));
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault(); // ensure no normal form submit
+      e.stopPropagation();
+    }
     setLoading(true);
     setSuccessMessage('');
     setTicketId('');
 
     try {
       const form = e.target;
+
+      // ensure school id available (from injected user or form)
+      const schoolIdVal = (form.reporter_school_id?.value || currentUser.school_id || '').trim();
+      if (!schoolIdVal) {
+        setSuccessMessage('School ID is required.');
+        setLoading(false);
+        return;
+      }
+
+      // validate reporter phone if provided: must be exactly 11 digits
+      const phoneRaw = (form.reporter_phone?.value || '').trim();
+      if (phoneRaw && !/^\d{11}$/.test(phoneRaw)) {
+        setSuccessMessage('Phone must be exactly 11 digits.');
+        setLoading(false);
+        return;
+      }
+
+      // validate victims: primary victim required and must be valid
+      const primaryVictim = (victims[0] || '').trim();
+      if (!isValidName(primaryVictim)) {
+        setSuccessMessage('Primary victim name is invalid. Use a real name.');
+        setLoading(false);
+        return;
+      }
+      for (let i = 1; i < victims.length; i++) {
+        const v = (victims[i] || '').trim();
+        if (v && !isValidName(v)) {
+          setSuccessMessage(`Victim ${i + 1} name is invalid.`);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // validate offender names if provided
+      for (let i = 0; i < offenders.length; i++) {
+        const o = (offenders[i] || '').trim();
+        if (o && !isValidName(o)) {
+          setSuccessMessage(`Offender ${i + 1} name is invalid.`);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // ensure reporter email is present (prefill from current user)
+      if (!form.reporter_email?.value && currentUser.email) {
+        const hiddenEmail = document.createElement('input');
+        hiddenEmail.type = 'hidden';
+        hiddenEmail.name = 'reporter_email';
+        hiddenEmail.value = currentUser.email;
+        form.appendChild(hiddenEmail);
+      }
+
       const fd = new FormData(form);
 
       // convert victim_names[] inputs to a single string field "victim_names"
       const victimList = victims.map(v => v.trim()).filter(Boolean).join(', ');
-      if (fd.has('victim_names[]')) {
-        fd.delete('victim_names[]');
-      }
-      if (victimList) {
-        fd.append('victim_names', victimList);
-      }
+      if (fd.has('victim_names[]')) fd.delete('victim_names[]');
+      if (victimList) fd.append('victim_names', victimList);
 
       // convert offender_names[] inputs to a single string field "offender_names"
       const offenderList = offenders.map(o => o.trim()).filter(Boolean).join(', ');
-      if (fd.has('offender_names[]')) {
-        fd.delete('offender_names[]');
-      }
-      if (offenderList) {
-        fd.append('offender_names', offenderList);
-      }
+      if (fd.has('offender_names[]')) fd.delete('offender_names[]');
+      if (offenderList) fd.append('offender_names', offenderList);
 
       const res = await fetch('/report', {
         method: 'POST',
         body: fd,
         headers: {
-          'X-CSRF-TOKEN': window.Laravel?.csrfToken || '',
+          'X-CSRF-TOKEN': csrfToken || '',
+          'X-Requested-With': 'XMLHttpRequest',
           'Accept': 'application/json'
         },
-        credentials: 'same-origin'
+        credentials: 'same-origin',
+        redirect: 'manual' // prevent automatic navigation to server response
       });
 
-      // If server redirected to a blade page, follow redirect (optional)
-      if (res.redirected) {
-        window.location.href = res.url;
-        return;
-      }
+      // read response text then try parse JSON (robust for HTML error pages)
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch (err) { /* not JSON */ }
 
-      const data = await res.json();
-
-      if (data && data.success) {
-        // accept common variations of ticket id key
-        const id = data.ticket_id ?? data.ticketId ?? data.ticket ?? data.id;
-        setSuccessMessage(data.message ?? 'Report submitted successfully.');
+      if (res.ok) {
+        const id = data?.ticket_id ?? data?.ticketId ?? data?.ticket ?? data?.id;
+        setSuccessMessage(data?.message ?? 'Report submitted successfully.');
         if (id) setTicketId(id);
-        // optionally set global for legacy code
-        window.reportSuccess = { message: data.message ?? 'Report submitted successfully.', ticketId: id };
-        // optionally clear form fields here (not implemented)
+        setGuide(data?.guide ?? (data?.note ? { headline: data?.message, note: data?.note } : null));
+        setRedirectUrl(data?.redirect ?? null);
+        window.reportSuccess = { message: data?.message ?? 'Report submitted successfully.', ticketId: id };
+
+        // do NOT auto-redirect — show guide and provide link only
+        // server redirect URL is available in redirectUrl state (rendered as plain text/link below)
       } else {
-        setSuccessMessage(data.message ?? 'Submission failed.');
+        console.error('Report submit failed', { status: res.status, body: text, json: data });
+        const serverMsg = data?.message || text || `Submission failed (status ${res.status})`;
+        setSuccessMessage(serverMsg);
       }
     } catch (err) {
       setSuccessMessage('Submission failed. Check console/network for details.');
@@ -90,12 +167,25 @@ function FileCaseForm() {
 
   return (
     <form onSubmit={handleSubmit} encType="multipart/form-data" style={{ background: '#f9f9f9', borderRadius: '8px', padding: '30px', maxWidth: '800px', margin: '0 auto', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-      <input type="hidden" name="_token" value={window.Laravel?.csrfToken} />
+      <input type="hidden" name="_token" value={csrfToken} />
 
       {successMessage && (
-        <div style={{ color: 'green', fontWeight: 'bold', marginBottom: 12 }}>
-          {successMessage}
-          {ticketId && (<div>Your Ticket ID: <strong style={{ color: 'blue' }}>{ticketId}</strong></div>)}
+        <div style={{ marginTop: 12 }}>
+          <div style={{ color: successMessage.startsWith('Submission failed') || successMessage.includes('invalid') ? 'red' : 'green', fontWeight: 'bold', marginBottom: 12 }}>
+            {successMessage}
+            {ticketId && (<div>Your Ticket ID: <strong style={{ color: 'blue' }}>{ticketId}</strong></div>)}
+          </div>
+
+          {/* guide / note from server */}
+          {guide && (
+            <div style={{ marginTop: 12, background: '#fff', border: '1px solid #e6e6e6', padding: 12, borderRadius: 6, color: '#222' }}>
+              {guide.headline && <div style={{ fontWeight: 700, marginBottom: 6 }}>{guide.headline}</div>}
+              {guide.steps && guide.steps.map((s, i) => (
+                <div key={i} style={{ marginBottom: 4 }}>{(i + 1) + '. ' + s}</div>
+              ))}
+              {guide.note && <div style={{ color: '#333', marginTop: 8 }}>{guide.note}</div>}
+            </div>
+          )}
         </div>
       )}
 
@@ -110,8 +200,8 @@ function FileCaseForm() {
         <h3>Person Reporting Incident</h3>
         <div className="row" style={{ display: 'flex', gap: '10px' }}>
           <div style={{ flex: 1 }}>
-            <label htmlFor="reporter_name">Name</label>
-            <input type="text" name="reporter_name" id="reporter_name" required />
+            <label htmlFor="reporter_school_id">School ID</label>
+            <input type="text" name="reporter_school_id" id="reporter_school_id" defaultValue={currentUser.school_id || ''} readOnly required />
           </div>
           <div style={{ flex: 1 }}>
             <label htmlFor="reporter_phone">Phone</label>
@@ -119,13 +209,13 @@ function FileCaseForm() {
           </div>
           <div style={{ flex: 1 }}>
             <label htmlFor="reporter_email">Email</label>
-            <input type="email" name="reporter_email" id="reporter_email" />
+            <input type="email" name="reporter_email" id="reporter_email" defaultValue={currentUser.email || ''} readOnly />
           </div>
         </div>
 
-        <div className="radio-group" style={{ marginTop: '10px', display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
+        <div className="radio-group" style={{ marginTop: '10px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px 20px' }}>
           {reporterOptions.map(opt => (
-            <label key={opt} style={{ flex: '1 1 200px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6 }}>
               <input
                 type="radio"
                 name="reporter_type[]"
@@ -195,34 +285,16 @@ function FileCaseForm() {
 
       <div className="form-section" style={{ marginBottom: '20px' }}>
         <h3>Type of Bullying (Check all that apply)</h3>
-        <div className="checkbox-group" style={{ marginBottom: '10px', display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
-          <div style={{ flex: '1 1 220px' }}>
-            <label><input type="checkbox" name="bullying_type[]" value="Name calling/offensive remarks" /> Name calling/offensive remarks</label>
-          </div>
-          <div style={{ flex: '1 1 220px' }}>
-            <label><input type="checkbox" name="bullying_type[]" value="Exclusion" /> Exclusion</label>
-          </div>
-          <div style={{ flex: '1 1 220px' }}>
-            <label><input type="checkbox" name="bullying_type[]" value="Hit, kicked, punched" /> Hit, kicked, punched</label>
-          </div>
-          <div style={{ flex: '1 1 220px' }}>
-            <label><input type="checkbox" name="bullying_type[]" value="Told lies or false rumors" /> Told lies or false rumors</label>
-          </div>
-          <div style={{ flex: '1 1 220px' }}>
-            <label><input type="checkbox" name="bullying_type[]" value="Threatened" /> Threatened</label>
-          </div>
-          <div style={{ flex: '1 1 220px' }}>
-            <label><input type="checkbox" name="bullying_type[]" value="Electronic communications" /> Electronic communications</label>
-          </div>
-          <div style={{ flex: '1 1 220px' }}>
-            <label><input type="checkbox" name="bullying_type[]" value="Racial comments" /> Racial comments</label>
-          </div>
-          <div style={{ flex: '1 1 220px' }}>
-            <label><input type="checkbox" name="bullying_type[]" value="Sexual comments" /> Sexual comments</label>
-          </div>
-          <div style={{ flex: '1 1 220px' }}>
-            <label><input type="checkbox" name="bullying_type[]" value="Took/damaged possessions" /> Took/damaged possessions</label>
-          </div>
+        <div className="checkbox-group" style={{ marginBottom: '10px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px 16px' }}>
+          <label><input type="checkbox" name="bullying_type[]" value="Name calling/offensive remarks" /> Name calling/offensive remarks</label>
+          <label><input type="checkbox" name="bullying_type[]" value="Exclusion" /> Exclusion</label>
+          <label><input type="checkbox" name="bullying_type[]" value="Hit, kicked, punched" /> Hit, kicked, punched</label>
+          <label><input type="checkbox" name="bullying_type[]" value="Told lies or false rumors" /> Told lies or false rumors</label>
+          <label><input type="checkbox" name="bullying_type[]" value="Threatened" /> Threatened</label>
+          <label><input type="checkbox" name="bullying_type[]" value="Electronic communications" /> Electronic communications</label>
+          <label><input type="checkbox" name="bullying_type[]" value="Racial comments" /> Racial comments</label>
+          <label><input type="checkbox" name="bullying_type[]" value="Sexual comments" /> Sexual comments</label>
+          <label><input type="checkbox" name="bullying_type[]" value="Took/damaged possessions" /> Took/damaged possessions</label>
         </div>
         <label htmlFor="bullying_explanation">Other/Explanation</label>
         <textarea name="bullying_explanation" id="bullying_explanation"></textarea>
@@ -230,7 +302,7 @@ function FileCaseForm() {
 
       <div className="form-section" style={{ marginBottom: '20px' }}>
         <h3>Where did the bullying happen? (Check all that apply)</h3>
-        <div className="checkbox-group" style={{ marginBottom: '10px' }}>
+        <div className="checkbox-group" style={{ marginBottom: '10px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px 16px' }}>
           <label><input type="checkbox" name="bullying_location[]" value="Outside" /> Outside</label>
           <label><input type="checkbox" name="bullying_location[]" value="Hallway" /> Hallway</label>
           <label><input type="checkbox" name="bullying_location[]" value="In class with teacher" /> In class with teacher</label>
@@ -247,7 +319,7 @@ function FileCaseForm() {
 
       <div className="form-section" style={{ marginBottom: '20px' }}>
         <h3>People the victim has spoken to about the bullying incident (Check all that apply)</h3>
-        <div className="checkbox-group">
+        <div className="checkbox-group" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px 16px' }}>
           <label><input type="checkbox" name="victim_spoken_to[]" value="Parent/Guardian" /> Parent/Guardian</label>
           <label><input type="checkbox" name="victim_spoken_to[]" value="Teacher" /> Teacher</label>
           <label><input type="checkbox" name="victim_spoken_to[]" value="School Counselor" /> School/School Counselor</label>
@@ -258,7 +330,12 @@ function FileCaseForm() {
         </div>
       </div>
 
-      <button type="submit" disabled={loading} className="btn" style={{ padding: '10px 30px', fontSize: '16px', background: '#28a745', color: '#fff', border: 'none', cursor: 'pointer' }}>
+      <button
+        type="submit"
+        disabled={loading}
+        className="btn"
+        style={{ padding: '10px 30px', fontSize: '16px', background: '#28a745', color: '#fff', border: 'none', cursor: 'pointer' }}
+      >
         {loading ? 'Submitting...' : 'Submit Report'}
       </button>
     </form>
@@ -290,7 +367,7 @@ function CheckReportForm() {
   };
 
   return (
-    <div style={{ maxWidth: 500, margin: '40px auto' }}>
+    <div style={{ maxWidth: 700, margin: '20px auto' }}>
       <h2 style={{ marginBottom: '20px', textAlign: 'center' }}>Check Report</h2>
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: '15px' }}>
@@ -334,57 +411,5 @@ function CheckReportForm() {
   );
 }
 
-export default function ReportForm() {
-  const [activeTab, setActiveTab] = useState('file');
-
-  return (
-    <div style={{ fontFamily: 'Arial, sans-serif', margin: '40px' }}>
-      <h1 style={{ textAlign: 'center', marginBottom: '40px', color: '#007bff' }}>Bullying Reporting Incident Form</h1>
-
-      <div style={{ background: '#007bff', padding: '15px 0', marginBottom: '30px', textAlign: 'center' }}>
-        <button
-          type="button"
-          onClick={() => setActiveTab('file')}
-          style={{
-            color: activeTab === 'file' ? '#fff' : '#007bff',
-            background: activeTab === 'file' ? '#0056b3' : '#fff',
-            fontWeight: 'bold',
-            margin: '0 30px',
-            textDecoration: 'none',
-            fontSize: '18px',
-            border: 'none',
-            padding: '10px 30px',
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
-        >
-          File Case
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('check')}
-          style={{
-            color: activeTab === 'check' ? '#fff' : '#007bff',
-            background: activeTab === 'check' ? '#0056b3' : '#fff',
-            fontWeight: 'bold',
-            margin: '0 30px',
-            textDecoration: 'none',
-            fontSize: '18px',
-            border: 'none',
-            padding: '10px 30px',
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
-        >
-          Check Report
-        </button>
-      </div>
-
-      {activeTab === 'file' ? <FileCaseForm /> : <CheckReportForm />}
-
-      <p style={{ textAlign: 'center', marginTop: '40px' }}>
-        <a href="/" style={{ color: '#007bff', fontWeight: 'bold', textDecoration: 'none' }}>Return to Main Screen</a>
-      </p>
-    </div>
-  );
-}
+export { CheckReportForm };
+export default FileCaseForm;
