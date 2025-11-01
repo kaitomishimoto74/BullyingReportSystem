@@ -3,6 +3,8 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\BullyingReportController;
 use App\Http\Controllers\AdminDashboardController;
+use App\Http\Controllers\AdminAuthController;
+use App\Http\Controllers\UserDashboardController;
 
 Route::get('/', function () {
     return view('main');
@@ -24,7 +26,8 @@ Route::get('/admin/register', function () {
     return view('admin_register');
 })->name('admin.register');
 
-Route::post('/admin/register', [App\Http\Controllers\AdminAuthController::class, 'register'])->name('admin.register.submit');
+Route::post('/admin/register', [AdminAuthController::class, 'register'])->name('admin.register');
+Route::post('/verify-otp', [AdminAuthController::class, 'verifyOtp'])->name('verify.otp');
 
 Route::get('/admin/login', function () {
     return view('admin_login');
@@ -32,9 +35,15 @@ Route::get('/admin/login', function () {
 
 Route::post('/admin/login', [App\Http\Controllers\AdminAuthController::class, 'login'])->name('admin.login.submit');
 
-Route::get('/admin/dashboard', [App\Http\Controllers\AdminDashboardController::class, 'index'])
+// Admin-only dashboard (new)
+Route::get('/admin/dashboard', [App\Http\Controllers\AdminPanelController::class, 'index'])
     ->middleware('auth')
     ->name('admin.dashboard');
+
+// Councilor dashboard (existing controller kept but mounted on /councilor/dashboard)
+Route::get('/councilor/dashboard', [App\Http\Controllers\AdminDashboardController::class, 'index'])
+    ->middleware('auth')
+    ->name('councilor.dashboard');
 
 Route::get('/admin/reports', [App\Http\Controllers\AdminDashboardController::class, 'reportsJson'])
     ->middleware('auth')
@@ -64,3 +73,8 @@ Route::get('/report/check', function () {
 })->name('report.check');
 
 Route::get('/admin/work-reports', [App\Http\Controllers\AdminDashboardController::class, 'workReportsJson']);
+
+// User dashboard
+Route::get('/user/dashboard', [UserDashboardController::class, 'index'])
+    ->middleware('auth')
+    ->name('user.dashboard');
