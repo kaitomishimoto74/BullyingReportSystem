@@ -8,6 +8,104 @@ export default function MainScreen() {
   const [reporterOtpStage, setReporterOtpStage] = useState(false);
   const [reporterMsg, setReporterMsg] = useState(null);
 
+  // Forgot password UI
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotStage, setForgotStage] = useState('email'); // 'email' | 'otp' | 'change'
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotOtp, setForgotOtp] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [forgotMsg, setForgotMsg] = useState(null);
+  const [forgotLoading, setForgotLoading] = useState(false);
+
+  const csrf = window.Laravel?.csrfToken || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+  const sendOtp = async (e) => {
+    e && e.preventDefault();
+    setForgotMsg(null);
+    if (!forgotEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(forgotEmail)) { setForgotMsg('Enter a valid email.'); return; }
+    setForgotLoading(true);
+    try {
+      const body = new URLSearchParams(); body.append('email', forgotEmail);
+      const res = await fetch('/password/forgot/send-otp', {
+        method: 'POST',
+        body,
+        headers: { 'X-CSRF-TOKEN': csrf, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+        credentials: 'same-origin'
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        setForgotStage('otp');
+        setForgotMsg('OTP sent to your email. Enter it below.');
+      } else {
+        setForgotMsg(data?.message || 'Failed to send OTP.');
+      }
+    } catch (err) {
+      console.error(err);
+      setForgotMsg('Request failed. See console.');
+    } finally { setForgotLoading(false); }
+  };
+
+  const verifyOtp = async (e) => {
+    e && e.preventDefault();
+    setForgotMsg(null);
+    if (!forgotOtp || forgotOtp.length < 4) { setForgotMsg('Enter the OTP.'); return; }
+    setForgotLoading(true);
+    try {
+      const body = new URLSearchParams(); body.append('email', forgotEmail); body.append('otp', forgotOtp);
+      const res = await fetch('/password/forgot/verify-otp', {
+        method: 'POST',
+        body,
+        headers: { 'X-CSRF-TOKEN': csrf, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+        credentials: 'same-origin'
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        setResetToken(data.reset_token || '');
+        setForgotStage('change');
+        setForgotMsg('OTP verified. Enter your new password.');
+      } else {
+        setForgotMsg(data?.message || 'OTP verification failed.');
+      }
+    } catch (err) {
+      console.error(err);
+      setForgotMsg('Request failed. See console.');
+    } finally { setForgotLoading(false); }
+  };
+
+  const changePassword = async (e) => {
+    e && e.preventDefault();
+    setForgotMsg(null);
+    const form = e.target;
+    const pw = form.password.value;
+    const pwc = form.password_confirmation.value;
+    if (!pw || pw.length < 6) { setForgotMsg('Password must be at least 6 chars.'); return; }
+    if (pw !== pwc) { setForgotMsg('Passwords do not match.'); return; }
+    setForgotLoading(true);
+    try {
+      const body = new URLSearchParams();
+      body.append('token', resetToken);
+      body.append('password', pw);
+      body.append('password_confirmation', pwc);
+      const res = await fetch('/password/forgot/change', {
+        method: 'POST',
+        body,
+        headers: { 'X-CSRF-TOKEN': csrf, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+        credentials: 'same-origin'
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        setForgotMsg('Password changed. You can now sign in.');
+        // close forgot UI and show login
+        setTimeout(() => { setShowForgot(false); setForgotStage('email'); setForgotEmail(''); setForgotOtp(''); setResetToken(''); setForgotMsg(null); }, 1600);
+      } else {
+        setForgotMsg(data?.message || 'Failed to change password.');
+      }
+    } catch (err) {
+      console.error(err);
+      setForgotMsg('Request failed. See console.');
+    } finally { setForgotLoading(false); }
+  };
+
   const loginError = window.backendErrors?.login;
   const registerError = window.backendErrors?.register;
 
@@ -34,6 +132,54 @@ export default function MainScreen() {
               <input type="password" name="password" placeholder="Password" required style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
             </div>
             <button type="submit" style={{ width: '100%', padding: '10px', background: '#007bff', color: '#fff', border: 'none', borderRadius: '4px' }}>Sign In</button>
+            <div style={{ marginTop: 10 }}>
+              <a href="/password/forgot" style={{ color: '#007bff', textDecoration: 'underline' }}>Forgot password?</a>
+            </div>
+            {showForgot && (
+              <div style={{ marginTop: 12, padding: 12, border: '1px solid #e6e6e6', borderRadius: 6 }}>
+                {forgotStage === 'email' && (
+                  <form onSubmit={sendOtp}>
+                    <div style={{ marginBottom: 8 }}>
+                      <input type="email" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} placeholder="Your email" required style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button type="submit" disabled={forgotLoading} style={{ padding: '8px 12px' }}>{forgotLoading ? 'Sending...' : 'Send OTP'}</button>
+                      <button type="button" onClick={() => { setShowForgot(false); setForgotMsg(null); setForgotStage('email'); }} style={{ padding: '8px 12px' }}>Cancel</button>
+                    </div>
+                  </form>
+                )}
+
+                {forgotStage === 'otp' && (
+                  <form onSubmit={verifyOtp}>
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ marginBottom: 6, fontSize: 13 }}>OTP sent to: <strong>{forgotEmail}</strong></div>
+                      <input type="text" value={forgotOtp} onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, '').slice(0,6))} placeholder="Enter 6-digit OTP" required style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button type="submit" disabled={forgotLoading} style={{ padding: '8px 12px' }}>{forgotLoading ? 'Verifying...' : 'Verify OTP'}</button>
+                      <button type="button" onClick={() => { setForgotStage('email'); setForgotOtp(''); setForgotMsg(null); }} style={{ padding: '8px 12px' }}>Back</button>
+                    </div>
+                  </form>
+                )}
+
+                {forgotStage === 'change' && (
+                  <form onSubmit={changePassword}>
+                    <div style={{ marginBottom: 8 }}>
+                      <input name="password" type="password" placeholder="New password" required style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} />
+                    </div>
+                    <div style={{ marginBottom: 8 }}>
+                      <input name="password_confirmation" type="password" placeholder="Confirm new password" required style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button type="submit" disabled={forgotLoading} style={{ padding: '8px 12px' }}>{forgotLoading ? 'Saving...' : 'Change Password'}</button>
+                      <button type="button" onClick={() => { setForgotStage('email'); setForgotOtp(''); setResetToken(''); setForgotMsg(null); }} style={{ padding: '8px 12px' }}>Cancel</button>
+                    </div>
+                  </form>
+                )}
+
+                {forgotMsg && <div style={{ marginTop: 8, color: forgotMsg.toLowerCase().includes('failed') || forgotMsg.toLowerCase().includes('invalid') ? 'red' : 'green' }}>{forgotMsg}</div>}
+              </div>
+            )}
             <div style={{ marginTop: '15px', textAlign: 'center' }}>
               <span>Don't have account? </span>
               <button type="button" onClick={handleShowRegister} style={{ background: 'none', border: 'none', color: '#007bff', cursor: 'pointer', textDecoration: 'underline' }}>Sign up</button>
@@ -122,6 +268,10 @@ export default function MainScreen() {
                       <input name="password_confirmation" type="password" placeholder="Confirm Password" required style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
                     </div>
                     <button type="submit" style={{ width: '100%', padding: '10px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '4px' }}>Register</button>
+                    <div style={{ marginTop: '15px', textAlign: 'center' }}>
+                      <span>Already have account? </span>
+                      <button type="button" onClick={handleShowLogin} style={{ background: 'none', border: 'none', color: '#007bff', cursor: 'pointer', textDecoration: 'underline' }}>Sign in</button>
+                    </div>
                   </form>
                 )}
 
@@ -142,8 +292,8 @@ export default function MainScreen() {
                       });
                       const data = await res.json().catch(() => null);
                       if (res.ok) {
-                        // redirect to user dashboard
-                        window.location.href = data?.redirect || '/user/dashboard';
+                        // always go to the MainScreen (root) after successful OTP
+                        window.location.href = '/';
                       } else {
                         alert(data?.message || 'OTP verification failed.');
                       }

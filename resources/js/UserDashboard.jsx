@@ -4,10 +4,41 @@ import ReportForm, { CheckReportForm } from './ReportForm.jsx';
 
 export default function UserDashboard() {
   const [view, setView] = useState('report'); // 'report' | 'check'
+  const [logoutError, setLogoutError] = useState('');
+  // CSRF token
+  const csrfToken = (typeof document !== 'undefined' && document.querySelector('meta[name="csrf-token"]'))
+    ? document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+    : (window.Laravel?.csrfToken || '');
+
   const currentUser = (typeof window !== 'undefined' && window.CurrentUser) ? window.CurrentUser : {};
   useEffect(() => { console.log('CurrentUser (from Blade):', currentUser); }, [currentUser]);
   const rawSchool = currentUser.school_id ?? currentUser.schoolId ?? currentUser.schoolID ?? currentUser.school ?? null;
   const schoolId = rawSchool ? String(rawSchool).trim() : 'Not set';
+
+  const handleLogout = async () => {
+    setLogoutError('');
+    if (!confirm('Log out now?')) return;
+    try {
+      const res = await fetch('/logout', {
+        method: 'POST',
+        headers: {
+          'X-CSRF-TOKEN': csrfToken,
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'application/json'
+        },
+        credentials: 'same-origin'
+      });
+      if (res.ok) {
+        window.location.href = '/login';
+        return;
+      }
+      const text = await res.text().catch(() => '');
+      setLogoutError(`Logout failed (${res.status}). ${text ? '' : ''}`);
+    } catch (err) {
+      setLogoutError('Logout failed. Check console.');
+      console.error(err);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'Arial, sans-serif' }}>
@@ -20,7 +51,9 @@ export default function UserDashboard() {
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button onClick={() => setView('report')} style={{ padding: '10px', borderRadius: 4, border: '1px solid #ddd', background: view === 'report' ? '#007bff' : '#fff', color: view === 'report' ? '#fff' : '#000' }}>Report Case</button>
           <button onClick={() => setView('check')} style={{ padding: '10px', borderRadius: 4, border: '1px solid #ddd', background: view === 'check' ? '#007bff' : '#fff', color: view === 'check' ? '#fff' : '#000' }}>Check Report</button>
+          <button onClick={handleLogout} style={{ padding: '10px', borderRadius: 4, border: '1px solid #ddd', background: '#fff', color: '#000' }}>Logout</button>
         </nav>
+        {logoutError && <div style={{ color: 'red', marginTop: 8 }}>{logoutError}</div>}
       </aside>
 
       <main style={{ flex: 1, padding: 24, marginLeft: 260 }}>

@@ -1,17 +1,21 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\BullyingReportController;
 use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\AdminAuthController;
 use App\Http\Controllers\UserDashboardController;
+use App\Http\Controllers\Auth\ForgotPasswordController;
+use App\Http\Controllers\Auth\PasswordOtpController;
 
 Route::get('/', function () {
     return view('main');
 })->name('main');
 
+// ensure /login goes to your main React view (MainScreen.jsx mounted there)
 Route::get('/login', function () {
-    // return view('login'); // Replace with your login view/controller
+    return redirect('/');
 })->name('login');
 
 Route::get('/report_form', function () {
@@ -63,10 +67,13 @@ Route::get('/admin/work', [App\Http\Controllers\AdminDashboardController::class,
     ->middleware('auth')
     ->name('admin.work');
 
-Route::post('/admin/logout', function () {
+// logout route for regular users (used by UserDashboard.jsx)
+Route::post('/logout', function (\Illuminate\Http\Request $request) {
     Auth::logout();
-    return redirect()->route('main');
-})->name('admin.logout');
+    $request->session()->invalidate();
+    $request->session()->regenerateToken();
+    return redirect('/');
+})->name('logout');
 
 Route::get('/report/check', function () {
     return view('report_check');
@@ -78,3 +85,18 @@ Route::get('/admin/work-reports', [App\Http\Controllers\AdminDashboardController
 Route::get('/user/dashboard', [UserDashboardController::class, 'index'])
     ->middleware('auth')
     ->name('user.dashboard');
+
+// Password reset routes
+Route::get('/password/reset', function () {
+    return view('auth.passwords.reset');
+})->name('password.request');
+
+Route::post('/password/forgot', [ForgotPasswordController::class, 'sendReset'])->name('password.forgot');
+Route::post('/password/forgot/send-otp', [PasswordOtpController::class, 'sendOtp'])->name('password.forgot.send');
+Route::post('/password/forgot/verify-otp', [PasswordOtpController::class, 'verifyOtp'])->name('password.forgot.verify');
+Route::post('/password/forgot/change', [PasswordOtpController::class, 'changePassword'])->name('password.forgot.change');
+
+// Forgot password form page (renders simple multi-step JS UI)
+Route::get('/password/forgot', function () {
+    return view('auth.forgot');
+})->name('password.forgot.form');
