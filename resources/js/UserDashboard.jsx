@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import ReportForm, { CheckReportForm } from './ReportForm.jsx';
 
 export default function UserDashboard() {
-  const [view, setView] = useState('report'); // 'report' | 'check'
+  const [view, setView] = useState('report'); // 'report' | 'check' | 'profile'
   const [logoutError, setLogoutError] = useState('');
   // CSRF token
   const csrfToken = (typeof document !== 'undefined' && document.querySelector('meta[name="csrf-token"]'))
@@ -51,6 +51,7 @@ export default function UserDashboard() {
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button onClick={() => setView('report')} style={{ padding: '10px', borderRadius: 4, border: '1px solid #ddd', background: view === 'report' ? '#007bff' : '#fff', color: view === 'report' ? '#fff' : '#000' }}>Report Case</button>
           <button onClick={() => setView('check')} style={{ padding: '10px', borderRadius: 4, border: '1px solid #ddd', background: view === 'check' ? '#007bff' : '#fff', color: view === 'check' ? '#fff' : '#000' }}>Check Report</button>
+          <button onClick={() => setView('profile')} style={{ padding: '10px', borderRadius: 4, border: '1px solid #ddd', background: view === 'profile' ? '#007bff' : '#fff', color: view === 'profile' ? '#fff' : '#000' }}>Profile</button>
           <button onClick={handleLogout} style={{ padding: '10px', borderRadius: 4, border: '1px solid #ddd', background: '#fff', color: '#000' }}>Logout</button>
         </nav>
         {logoutError && <div style={{ color: 'red', marginTop: 8 }}>{logoutError}</div>}
@@ -71,6 +72,18 @@ export default function UserDashboard() {
             <h2>Check Report</h2>
             <CheckReportForm />
           </section>
+        )}
+
+        {view === 'profile' && (
+          <div style={{ padding: 16, background: '#fff', borderRadius: 6 }}>
+            <h2 style={{ marginTop: 0 }}>Profile</h2>
+            <div style={{ marginBottom: 8 }}><strong>Name:</strong> {window.CurrentUser?.name ?? window.CurrentUser?.first_name + ' ' + window.CurrentUser?.last_name}</div>
+            <div style={{ marginBottom: 8 }}><strong>Email:</strong> {window.CurrentUser?.email}</div>
+            <div style={{ marginBottom: 8 }}><strong>School ID:</strong> {window.CurrentUser?.school_id ?? window.CurrentUser?.school}</div>
+            <div style={{ marginTop: 12 }}>
+              <a href="/profile" style={{ color: '#007bff', textDecoration: 'underline' }}>Edit profile</a>
+            </div>
+          </div>
         )}
       </main>
     </div>
