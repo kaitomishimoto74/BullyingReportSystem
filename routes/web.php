@@ -8,6 +8,7 @@ use App\Http\Controllers\AdminAuthController;
 use App\Http\Controllers\UserDashboardController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\PasswordOtpController;
+use App\Http\Controllers\ProfileController;
 
 Route::get('/', function () {
     return view('main');
@@ -100,3 +101,8 @@ Route::post('/password/forgot/change', [PasswordOtpController::class, 'changePas
 Route::get('/password/forgot', function () {
     return view('auth.forgot');
 })->name('password.forgot.form');
+
+Route::middleware(['auth'])->group(function () {
+    Route::post('/profile/update', [ProfileController::class, 'update'])->name('profile.update');
+    Route::post('/profile/password', [ProfileController::class, 'changePassword'])->name('profile.password');
+});
