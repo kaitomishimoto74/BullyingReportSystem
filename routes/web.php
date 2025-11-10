@@ -10,6 +10,8 @@ use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\PasswordOtpController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\AdminPanelController;
+use App\Http\Controllers\CouncilorRegistrationController;
+use App\Http\Controllers\CouncilorDashboardController;
 
 Route::get('/', function () {
     return view('main');
@@ -46,9 +48,21 @@ Route::get('/admin/dashboard', [App\Http\Controllers\AdminPanelController::class
     ->middleware('auth')
     ->name('admin.dashboard');
 
-// Councilor dashboard (existing controller kept but mounted on /councilor/dashboard)
-Route::get('/councilor/dashboard', [App\Http\Controllers\AdminDashboardController::class, 'index'])
-    ->middleware('auth')
+// Councilor registration (public)
+Route::post('/councilor/register', [CouncilorRegistrationController::class, 'register'])->name('councilor.register');
+
+// Councilor registration OTP endpoints
+Route::post('/councilor/register/send-otp', [CouncilorRegistrationController::class, 'sendOtp'])->name('councilor.register.sendOtp');
+Route::post('/councilor/register/verify-otp', [CouncilorRegistrationController::class, 'verifyOtp'])->name('councilor.register.verifyOtp');
+
+// Access denied page
+Route::get('/access-denied', function () {
+    return view('access_denied');
+})->name('access.denied');
+
+// Councilor dashboard — require auth and approval
+Route::get('/councilor/dashboard', [CouncilorDashboardController::class, 'index'])
+    ->middleware(['auth', 'approved'])
     ->name('councilor.dashboard');
 
 Route::get('/admin/reports', [App\Http\Controllers\AdminDashboardController::class, 'reportsJson'])
@@ -116,3 +130,32 @@ Route::middleware(['auth'])->group(function () {
 Route::get('/admin/summary', [AdminPanelController::class, 'summaryJson'])
     ->middleware('auth')
     ->name('admin.summary');
+
+// Admin: list councilor applications
+Route::get('/admin/applications', function () {
+    $applications = \App\Models\CouncilorApplication::orderBy('created_at', 'desc')->get();
+    return view('admin.applications', compact('applications'));
+})->name('admin.applications');
+
+// Admin: preview single application
+Route::get('/admin/applications/{id}/preview', function ($id) {
+    $app = \App\Models\CouncilorApplication::findOrFail($id);
+    $user = \App\Models\User::find($app->user_id);
+    return view('admin.application_preview', compact('app', 'user'));
+})->name('admin.applications.preview');
+
+// JSON endpoint for Admin React dashboard
+Route::get('/admin/api/applications', function () {
+    $applications = \App\Models\CouncilorApplication::orderBy('created_at', 'desc')->get()->map(function ($app) {
+        $user = \App\Models\User::find($app->user_id);
+        return [
+            'id' => $app->id,
+            'name' => $user ? $user->name : 'Unknown applicant',
+            'email' => $user ? $user->email : null,
+            'status' => $app->status ?? 'pending',
+            'attachment_path' => $app->attachment_path,
+        ];
+    });
+
+    return response()->json(['data' => $applications]);
+})->name('admin.api.applications');

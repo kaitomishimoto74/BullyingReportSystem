@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import ReactDOM from 'react-dom';
+import ReactDOM, { createRoot } from 'react-dom/client';
 
 export default function AdminDashboard() {
   // prefer window.CurrentUser (matches user dashboard), fallback to data attribute
@@ -317,8 +317,8 @@ export default function AdminDashboard() {
 const el = document.getElementById('admin-dashboard-root');
 if (el) {
   try {
-    if (ReactDOM && ReactDOM.createRoot) {
-      ReactDOM.createRoot(el).render(<AdminDashboard />);
+    if (typeof createRoot === 'function') {
+      createRoot(el).render(<AdminDashboard />);
     } else if (ReactDOM && ReactDOM.render) {
       ReactDOM.render(<AdminDashboard />, el);
     } else {

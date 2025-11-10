@@ -17,6 +17,13 @@ export default function MainScreen() {
   const [forgotMsg, setForgotMsg] = useState(null);
   const [forgotLoading, setForgotLoading] = useState(false);
 
+  // Councilor registration OTP
+  const [councilorOtpStage, setCouncilorOtpStage] = useState(false);
+  const [councilorPendingEmail, setCouncilorPendingEmail] = useState(null);
+  const [councilorOtp, setCouncilorOtp] = useState('');
+  const [councilorMsg, setCouncilorMsg] = useState(null);
+  const [councilorLoading, setCouncilorLoading] = useState(false);
+
   const csrf = window.Laravel?.csrfToken || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
   const sendOtp = async (e) => {
@@ -95,7 +102,6 @@ export default function MainScreen() {
       const data = await res.json().catch(() => null);
       if (res.ok && data?.success) {
         setForgotMsg('Password changed. You can now sign in.');
-        // close forgot UI and show login
         setTimeout(() => { setShowForgot(false); setForgotStage('email'); setForgotEmail(''); setForgotOtp(''); setResetToken(''); setForgotMsg(null); }, 1600);
       } else {
         setForgotMsg(data?.message || 'Failed to change password.');
@@ -111,6 +117,105 @@ export default function MainScreen() {
 
   const handleShowLogin = () => setShowRegister(false);
   const handleShowRegister = () => setShowRegister(true);
+
+  // use same OTP flow as Reporter registration: call /admin/register then /verify-otp
+  const handleCouncilorSendOtp = async (e) => {
+    e.preventDefault();
+    setCouncilorMsg(null);
+    const form = e.currentTarget;
+    const first_name = form.first_name.value.trim();
+    const last_name = form.last_name.value.trim();
+    const username = form.username.value.trim();
+    const email = form.email.value.trim();
+    const address = form.address.value.trim();
+    const password = form.password.value;
+    const password_confirmation = form.password_confirmation.value;
+
+    if (!first_name || !last_name) { setCouncilorMsg('First and last name are required.'); return; }
+    if (!username) { setCouncilorMsg('Username is required.'); return; }
+    if (!email) { setCouncilorMsg('Email is required.'); return; }
+    if (!password || password !== password_confirmation) { setCouncilorMsg('Passwords are required and must match.'); return; }
+
+    setCouncilorLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append('first_name', first_name);
+      fd.append('last_name', last_name);
+      fd.append('username', username);
+      fd.append('email', email);
+      fd.append('address', address);
+      fd.append('password', password);
+      fd.append('password_confirmation', password_confirmation);
+      const file = form.attachment?.files?.[0];
+      if (file) fd.append('attachment', file);
+
+      // <- changed endpoint: use the councilor controller send-otp route
+      const res = await fetch('/councilor/register/send-otp', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-CSRF-TOKEN': csrf },
+        body: fd
+      });
+
+      const data = await res.json().catch(()=>null);
+      if (res.ok || res.status === 201) {
+        setCouncilorPendingEmail(email);
+        setCouncilorOtpStage(true);
+        // show OTP in UI if backend returns it for debug
+        if (data?.otp) {
+          setCouncilorMsg((data.message || 'OTP sent.') + ` (debug OTP: ${data.otp})`);
+        } else {
+          setCouncilorMsg(data?.message || 'OTP sent to your email. Enter it below.');
+        }
+      } else {
+        setCouncilorMsg(data?.message || (data?.errors ? JSON.stringify(data.errors) : `Failed (${res.status})`));
+      }
+    } catch (err) {
+      console.error(err);
+      setCouncilorMsg('Request failed. See console.');
+    } finally {
+      setCouncilorLoading(false);
+    }
+  };
+
+  // verify OTP using councilor controller endpoint (was /verify-otp)
+  const handleCouncilorVerifyOtp = async (e) => {
+    e && e.preventDefault();
+    setCouncilorMsg(null);
+    if (!councilorPendingEmail) { setCouncilorMsg('No pending registration found.'); return; }
+    if (!councilorOtp || councilorOtp.length < 4) { setCouncilorMsg('Enter the OTP.'); return; }
+
+    setCouncilorLoading(true);
+    try {
+      const res = await fetch('/councilor/register/verify-otp', {   // <-- changed URL
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': csrf,
+          Accept: 'application/json'
+        },
+        body: JSON.stringify({ email: councilorPendingEmail, otp: councilorOtp }),
+      });
+
+      const data = await res.json().catch(()=>null);
+      if (res.ok) {
+        alert(data?.message || 'Registration completed. Check email and wait for admin approval.');
+        setCouncilorOtpStage(false);
+        setCouncilorPendingEmail(null);
+        setCouncilorOtp('');
+        setCouncilorMsg(null);
+        window.location.href = '/';
+      } else {
+        setCouncilorMsg(data?.message || `Verification failed (${res.status})`);
+      }
+    } catch (err) {
+      console.error(err);
+      setCouncilorMsg('Request failed. See console.');
+    } finally {
+      setCouncilorLoading(false);
+    }
+  };
 
   return (
     <div style={{ fontFamily: 'Arial, sans-serif', marginTop: '60px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -153,7 +258,7 @@ export default function MainScreen() {
                   <form onSubmit={verifyOtp}>
                     <div style={{ marginBottom: 8 }}>
                       <div style={{ marginBottom: 6, fontSize: 13 }}>OTP sent to: <strong>{forgotEmail}</strong></div>
-                      <input type="text" value={forgotOtp} onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, '').slice(0,6))} placeholder="Enter 6-digit OTP" required style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} />
+                      <input type="text" value={forgotOtp} onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, '').slice(0,6))} maxLength="6" placeholder="Enter 6-digit OTP" required style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} />
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button type="submit" disabled={forgotLoading} style={{ padding: '8px 12px' }}>{forgotLoading ? 'Verifying...' : 'Verify OTP'}</button>
@@ -316,74 +421,72 @@ export default function MainScreen() {
             )}
 
             {regRole === 'councilor' && (
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const form = e.target;
-                  const first_name = form.first_name.value.trim();
-                  const last_name = form.last_name.value.trim();
-                  const username = form.username.value.trim();
-                  const email = form.email.value.trim();
-                  const password = form.password.value;
-                  const password_confirmation = form.password_confirmation.value;
+              <>
+                {!councilorOtpStage && (
+                  <form onSubmit={handleCouncilorSendOtp} encType="multipart/form-data" autoComplete="off">
+                    <input type="hidden" name="_token" value={csrf} />
+                    <h2 style={{ marginBottom: '20px', textAlign: 'center' }}>Councilor Registration</h2>
 
-                  if (!first_name || !last_name) { alert('First and last name are required.'); return; }
-                  if (!username) { alert('Username is required.'); return; }
-                  if (!email) { alert('Email is required.'); return; }
-                  if (!password || password !== password_confirmation) { alert('Passwords are required and must match.'); return; }
+                    <div style={{ marginBottom: '12px' }}>
+                      <input name="first_name" placeholder="First Name" required style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
+                    </div>
 
-                  const payload = { role: 'councilor', first_name, last_name, username, email, password, password_confirmation };
-                  const csrf = window.Laravel?.csrfToken || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-                  try {
-                    const res = await fetch('/admin/register', {
-                      method: 'POST',
-                      credentials: 'include',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': csrf,
-                        Accept: 'application/json',
-                      },
-                      body: JSON.stringify(payload),
-                    });
-                    const data = await res.json().catch(() => null);
-                    if (res.ok || res.status === 201) {
-                      alert(data?.message || 'Councilor registered.');
-                      window.location.href = '/';
-                    } else {
-                      const msg = data?.message || (data?.errors ? JSON.stringify(data.errors) : 'Registration failed');
-                      alert(msg);
-                    }
-                  } catch (err) {
-                    alert(err.message || 'Unexpected error during registration.');
-                  }
-                }}
-              >
-                <input type="hidden" name="_token" value={window.Laravel.csrfToken} />
-                <h2 style={{ marginBottom: '20px', textAlign: 'center' }}>Councilor Registration</h2>
-                <div style={{ marginBottom: '15px' }}>
-                  <input name="first_name" placeholder="First Name" style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
-                </div>
-                <div style={{ marginBottom: '15px' }}>
-                  <input name="last_name" placeholder="Last Name" style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
-                </div>
-                <div style={{ marginBottom: '15px' }}>
-                  <input name="username" placeholder="Username" style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
-                </div>
-                <div style={{ marginBottom: '15px' }}>
-                  <input name="email" type="email" placeholder="Email" required style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
-                </div>
-                <div style={{ marginBottom: '15px' }}>
-                  <input name="password" type="password" placeholder="Password" required style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
-                </div>
-                <div style={{ marginBottom: '15px' }}>
-                  <input name="password_confirmation" type="password" placeholder="Confirm Password" required style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
-                </div>
-                <button type="submit" style={{ width: '100%', padding: '10px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '4px' }}>Register</button>
-                <div style={{ marginTop: '15px', textAlign: 'center' }}>
-                  <span>Already have account? </span>
-                  <button type="button" onClick={handleShowLogin} style={{ background: 'none', border: 'none', color: '#007bff', cursor: 'pointer', textDecoration: 'underline' }}>Sign in</button>
-                </div>
-              </form>
+                    <div style={{ marginBottom: '12px' }}>
+                      <input name="last_name" placeholder="Last Name" required style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <input name="username" placeholder="Username" required style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <input name="email" type="email" placeholder="Email" required style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <input name="address" placeholder="Address" style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <input name="attachment" type="file" accept="image/*,application/pdf" style={{ width: '100%' }} />
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <input name="password" type="password" placeholder="Password" required style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <input name="password_confirmation" type="password" placeholder="Confirm Password" required style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
+                    </div>
+
+                    <button type="submit" disabled={councilorLoading} style={{ width: '100%', padding: '10px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '4px' }}>
+                      {councilorLoading ? 'Sending OTP...' : 'Register (send OTP)'}
+                    </button>
+
+                    <div style={{ marginTop: '15px', textAlign: 'center' }}>
+                      <span>Already have account? </span>
+                      <button type="button" onClick={handleShowLogin} style={{ background: 'none', border: 'none', color: '#007bff', cursor: 'pointer', textDecoration: 'underline' }}>Sign in</button>
+                    </div>
+
+                    {councilorMsg && <div style={{marginTop:10,color:councilorMsg.toLowerCase().includes('failed') ? 'red' : 'green'}}>{councilorMsg}</div>}
+                  </form>
+                )}
+
+                {councilorOtpStage && (
+                  <form onSubmit={handleCouncilorVerifyOtp} style={{ padding: 12, background:'#fff', borderRadius:6 }}>
+                    <h3 style={{ marginBottom: 10 }}>Enter OTP</h3>
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ marginBottom: 6, fontSize: 13 }}>OTP sent to: <strong>{councilorPendingEmail}</strong></div>
+                      <input value={councilorOtp} onChange={(e) => setCouncilorOtp(e.target.value.replace(/\D/g, '').slice(0,6))} maxLength="6" placeholder="Enter 6-digit code" style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button type="submit" disabled={councilorLoading} style={{ padding: '8px 12px', background: '#0b5fff', color: '#fff', border: 'none', borderRadius:4 }}>{councilorLoading ? 'Verifying...' : 'Verify OTP'}</button>
+                      <button type="button" onClick={() => { setCouncilorOtpStage(false); setCouncilorPendingEmail(''); setCouncilorOtp(''); setCouncilorMsg(null); }} style={{ padding: '8px 12px' }}>Cancel</button>
+                    </div>
+                    {councilorMsg && <div style={{ marginTop: 8, color: councilorMsg.toLowerCase().includes('failed') ? 'red' : 'green' }}>{councilorMsg}</div>}
+                  </form>
+                )}
+              </>
             )}
           </div>
         )}

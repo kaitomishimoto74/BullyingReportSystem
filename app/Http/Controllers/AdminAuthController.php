@@ -142,6 +142,18 @@ class AdminAuthController extends Controller
         if (Auth::attempt([$login_type => $request->login, 'password' => $request->password])) {
             $user = Auth::user();
 
+            // If councilor is not approved, log out and send to access denied page
+            if (($user->role ?? '') === 'councilor' && ! ($user->is_approved ?? false)) {
+                Auth::logout();
+                if ($request->wantsJson()) {
+                    return response()->json([
+                        'message' => 'Access denied. Account not approved.',
+                        'redirect' => url('/access-denied')
+                    ], 403);
+                }
+                return redirect('/access-denied')->with('error', 'Your account is not yet approved by the administrator.');
+            }
+
             // Redirect based on role
             $role = $user->role ?? 'user';
             if ($role === 'admin') {
