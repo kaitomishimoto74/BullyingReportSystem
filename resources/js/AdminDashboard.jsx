@@ -18,11 +18,45 @@ export default function AdminDashboard() {
   const [reports, setReports] = useState([]);
   const [msg, setMsg] = useState('');
 
+  // summary state for Home cards
+  const [summary, setSummary] = useState(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+
+  // password change state for profile
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [pwdMsg, setPwdMsg] = useState('');
+  const [pwdLoading, setPwdLoading] = useState(false);
+
+  async function loadSummary() {
+    setSummaryLoading(true);
+    setMsg('');
+    try {
+      const res = await fetch('/admin/summary', { credentials: 'same-origin', headers: { 'Accept': 'application/json' }});
+      if (!res.ok) {
+        setMsg('Failed to load summary.');
+        setSummary(null);
+        return;
+      }
+      const data = await res.json().catch(()=>null);
+      setSummary(data || null);
+    } catch (e) {
+      console.error(e);
+      setMsg('Failed to load summary. See console.');
+      setSummary(null);
+    } finally {
+      setSummaryLoading(false);
+    }
+  }
+  
   useEffect(() => {
     if (view === 'applications') loadApplications();
     if (view === 'reports') loadReports();
+    if (view === 'home') loadSummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
-
+  
   async function loadApplications() {
     setLoading(true); setMsg('');
     try {
@@ -87,6 +121,46 @@ export default function AdminDashboard() {
     window.location.href = '/';
   }
 
+  // submit change password to /profile/password
+  async function submitChangePassword(e) {
+    e && e.preventDefault();
+    setPwdMsg('');
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPwdMsg('Please fill all password fields.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPwdMsg('New password and confirmation do not match.');
+      return;
+    }
+    setPwdLoading(true);
+    try {
+      const body = new URLSearchParams();
+      body.append('current_password', currentPassword);
+      body.append('password', newPassword);
+      body.append('password_confirmation', confirmPassword);
+
+      const res = await fetch('/profile/password', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+        body
+      });
+      const data = await res.json().catch(()=>null);
+      if (res.ok && data?.success) {
+        setPwdMsg('Password updated.');
+        setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
+      } else {
+        setPwdMsg((data && (data.message || JSON.stringify(data.errors))) || `Failed (${res.status})`);
+      }
+    } catch (err) {
+      console.error(err);
+      setPwdMsg('Request failed. See console.');
+    } finally {
+      setPwdLoading(false);
+    }
+  }
+
   // Layout: fixed sidebar so it doesn't scroll; main has left margin equal to sidebar width
   const SIDEBAR_WIDTH = 260;
   const layoutStyle = { display: 'flex', minHeight: '100vh', fontFamily: 'Arial,Helvetica,sans-serif', background: '#f4f6f8', margin: 0 };
@@ -113,10 +187,41 @@ export default function AdminDashboard() {
           <div>
             <h2>Home</h2>
             <p>Welcome back, {initialUser?.name ?? 'Admin'}.</p>
-            <div style={{marginTop:12}}>
-              <strong>Quick summary</strong>
-              <div style={{marginTop:8, color:'#666'}}>{msg}</div>
+            <div style={{marginTop:12, display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:12}}>
+              <div style={{background:'#fff',padding:14,borderRadius:8,boxShadow:'0 1px 2px rgba(0,0,0,0.04)'}}>
+                <div style={{fontSize:12,color:'#666'}}>Total Users</div>
+                <div style={{fontSize:20,fontWeight:700,marginTop:8}}>{summaryLoading ? '...' : (summary?.total_users ?? '—')}</div>
+                <div style={{fontSize:12,color:'#999',marginTop:6}}>All accounts</div>
+              </div>
+
+              <div style={{background:'#fff',padding:14,borderRadius:8,boxShadow:'0 1px 2px rgba(0,0,0,0.04)'}}>
+                <div style={{fontSize:12,color:'#666'}}>Total Reporters</div>
+                <div style={{fontSize:20,fontWeight:700,marginTop:8}}>{summaryLoading ? '...' : (summary?.total_reporters ?? '—')}</div>
+              </div>
+
+              <div style={{background:'#fff',padding:14,borderRadius:8,boxShadow:'0 1px 2px rgba(0,0,0,0.04)'}}>
+                <div style={{fontSize:12,color:'#666'}}>Total Councilors</div>
+                <div style={{fontSize:20,fontWeight:700,marginTop:8}}>{summaryLoading ? '...' : (summary?.total_councilors ?? '—')}</div>
+              </div>
+
+              <div style={{background:'#fff',padding:14,borderRadius:8,boxShadow:'0 1px 2px rgba(0,0,0,0.04)'}}>
+                <div style={{fontSize:12,color:'#666'}}>Total Reports</div>
+                <div style={{fontSize:20,fontWeight:700,marginTop:8}}>{summaryLoading ? '...' : (summary?.total_reports ?? '—')}</div>
+                <div style={{fontSize:12,color:'#999',marginTop:6}}>Submitted reports</div>
+              </div>
+
+              <div style={{background:'#fff',padding:14,borderRadius:8,boxShadow:'0 1px 2px rgba(0,0,0,0.04)'}}>
+                <div style={{fontSize:12,color:'#666'}}>Pending</div>
+                <div style={{fontSize:20,fontWeight:700,marginTop:8}}>{summaryLoading ? '...' : (summary?.pending_reports ?? '—')}</div>
+              </div>
+
+              <div style={{background:'#fff',padding:14,borderRadius:8,boxShadow:'0 1px 2px rgba(0,0,0,0.04)'}}>
+                <div style={{fontSize:12,color:'#666'}}>Completed</div>
+                <div style={{fontSize:20,fontWeight:700,marginTop:8}}>{summaryLoading ? '...' : (summary?.completed_reports ?? '—')}</div>
+              </div>
+
             </div>
+            {msg && <div style={{marginTop:12,color:'red'}}>{msg}</div>}
           </div>
         )}
 
@@ -167,13 +272,39 @@ export default function AdminDashboard() {
         {view === 'profile' && (
           <div>
             <h2>Profile</h2>
-            <div style={{maxWidth:640,background:'#fff',padding:12,borderRadius:6}}>
-              <div><strong>Name:</strong> {initialUser?.name}</div>
-              <div><strong>Email:</strong> {initialUser?.email}</div>
-              <div style={{marginTop:8}}>
-                <a href="#" onClick={(e)=>{ e.preventDefault(); setMsg('Profile editing not implemented yet.'); }}>Edit profile</a>
+            <div style={{maxWidth:640,background:'#fff',padding:16,borderRadius:6}}>
+              <div style={{marginBottom:12}}>
+                <label style={{display:'block',fontSize:13,marginBottom:6}}>Name</label>
+                <input value={initialUser?.name || ''} readOnly style={{width:'100%',padding:8,borderRadius:4,border:'1px solid #ddd',background:'#f6f6f6'}} />
               </div>
-              {msg && <div style={{marginTop:10,color:'green'}}>{msg}</div>}
+              <div style={{marginBottom:16}}>
+                <label style={{display:'block',fontSize:13,marginBottom:6}}>Email</label>
+                <input value={initialUser?.email || ''} readOnly style={{width:'100%',padding:8,borderRadius:4,border:'1px solid #ddd',background:'#f6f6f6'}} />
+              </div>
+
+              <hr style={{margin:'12px 0'}} />
+              <h4 style={{marginTop:8}}>Change Password</h4>
+              <form onSubmit={submitChangePassword} style={{marginTop:8}}>
+                <div style={{marginBottom:10}}>
+                  <label style={{display:'block',fontSize:13,marginBottom:6}}>Current password</label>
+                  <input type="password" value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)} style={{width:'100%',padding:8,borderRadius:4,border:'1px solid #ddd'}} required />
+                </div>
+                <div style={{marginBottom:10}}>
+                  <label style={{display:'block',fontSize:13,marginBottom:6}}>New password</label>
+                  <input type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} style={{width:'100%',padding:8,borderRadius:4,border:'1px solid #ddd'}} required />
+                </div>
+                <div style={{marginBottom:10}}>
+                  <label style={{display:'block',fontSize:13,marginBottom:6}}>Confirm new password</label>
+                  <input type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} style={{width:'100%',padding:8,borderRadius:4,border:'1px solid #ddd'}} required />
+                </div>
+                <div style={{marginTop:12,display:'flex',gap:8}}>
+                  <button type="submit" disabled={pwdLoading} style={{padding:'8px 12px',background:'#0b5fff',color:'#fff',border:'none',borderRadius:4}}>
+                    {pwdLoading ? 'Saving...' : 'Change password'}
+                  </button>
+                  <button type="button" onClick={()=>{ setCurrentPassword(''); setNewPassword(''); setConfirmPassword(''); setPwdMsg(''); }} style={{padding:'8px 12px',borderRadius:4}}>Reset</button>
+                </div>
+                {pwdMsg && <div style={{marginTop:10,color: pwdMsg.toLowerCase().includes('failed') || pwdMsg.toLowerCase().includes('error') ? 'red' : 'green'}}>{pwdMsg}</div>}
+              </form>
             </div>
           </div>
         )}

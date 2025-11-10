@@ -8,6 +8,8 @@ use App\Http\Controllers\AdminAuthController;
 use App\Http\Controllers\UserDashboardController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\PasswordOtpController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\AdminPanelController;
 
 Route::get('/', function () {
     return view('main');
@@ -100,3 +102,17 @@ Route::post('/password/forgot/change', [PasswordOtpController::class, 'changePas
 Route::get('/password/forgot', function () {
     return view('auth.forgot');
 })->name('password.forgot.form');
+
+// profile routes (requires auth)
+Route::middleware(['auth'])->group(function () {
+    // change password used by AdminDashboard.jsx
+    Route::post('/profile/password', [ProfileController::class, 'changePassword'])->name('profile.password');
+
+    // optional: profile update endpoint if your frontend uses it
+    Route::post('/profile/update', [ProfileController::class, 'update'])->name('profile.update');
+});
+
+// admin summary for SPA
+Route::get('/admin/summary', [AdminPanelController::class, 'summaryJson'])
+    ->middleware('auth')
+    ->name('admin.summary');
