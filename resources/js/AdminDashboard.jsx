@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import ReactDOM, { createRoot } from 'react-dom/client';
+import ReactDOM from 'react-dom';
+import { createRoot } from 'react-dom/client';
 
 export default function AdminDashboard() {
   // prefer window.CurrentUser (matches user dashboard), fallback to data attribute
@@ -232,25 +233,19 @@ export default function AdminDashboard() {
             {msg && <div style={{color:'red', marginTop:6}}>{msg}</div>}
             {!loading && applications.length === 0 && !msg && <div>No applications found.</div>}
             {!loading && applications.length > 0 && (
-              <table style={{width:'100%',borderCollapse:'collapse',marginTop:10}}>
-                <thead>
-                  <tr style={{textAlign:'left'}}><th>#</th><th>Name</th><th>Email</th><th>Address</th><th>Attachment</th><th>Submitted</th></tr>
-                </thead>
-                <tbody>
-                  {applications.map((a,i) => (
-                    <tr key={a.id ?? i} style={{borderTop:'1px solid #eee'}}>
-                      <td style={{padding:8}}>{a.id ?? i+1}</td>
-                      <td style={{padding:8}}>{a.user?.name ?? (a.first_name && a.last_name ? `${a.first_name} ${a.last_name}` : '-')}</td>
-                      <td style={{padding:8}}>{a.user?.email ?? a.email}</td>
-                      <td style={{padding:8}}>{a.user?.address ?? a.address ?? '-'}</td>
-                      <td style={{padding:8}}>
-                        {a.attachment_path ? <a href={`/storage/${a.attachment_path}`} target="_blank" rel="noreferrer">View</a> : '-'}
-                      </td>
-                      <td style={{padding:8}}>{a.created_at ?? a.submitted_at ?? '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 12, marginTop: 10 }}>
+                {applications.map((app) => (
+                  <div key={app.id} style={{ position: 'relative', background: '#fff', padding: 18, borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', minHeight: 110, boxSizing: 'border-box' }}>
+                    <div style={{ position: 'absolute', top: 10, left: 12, fontSize: 12, color: '#666' }}>Application #{app.id}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 48, fontSize: 16, fontWeight: 700 }}>{app.name || 'Unknown applicant'}</div>
+                    <div style={{ textAlign: 'center', marginTop: 10 }}>
+                      <a href={`/admin/applications/${app.id}/preview`} style={{ display: 'inline-block', padding: '8px 12px', background: '#007bff', color: '#fff', borderRadius: 4, textDecoration: 'none' }}>
+                        Preview
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}

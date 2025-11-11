@@ -143,15 +143,19 @@ class AdminAuthController extends Controller
             $user = Auth::user();
 
             // If councilor is not approved, log out and send to access denied page
-            if (($user->role ?? '') === 'councilor' && ! ($user->is_approved ?? false)) {
-                Auth::logout();
-                if ($request->wantsJson()) {
-                    return response()->json([
-                        'message' => 'Access denied. Account not approved.',
-                        'redirect' => url('/access-denied')
-                    ], 403);
+            if (($user->role ?? '') === 'councilor') {
+                if (! ($user->is_approved ?? false)) {
+                    Auth::logout();
+                    if ($request->wantsJson()) {
+                        return response()->json([
+                            'message' => 'Access denied. Account not approved.',
+                            'redirect' => route('access.denied')
+                        ], 403);
+                    }
+                    return redirect()->route('access.denied');
                 }
-                return redirect('/access-denied')->with('error', 'Your account is not yet approved by the administrator.');
+                // approved councilor -> redirect to the frontend page that mounts js/Dashboard.jsx
+                return redirect()->to('/dashboard');
             }
 
             // Redirect based on role
@@ -161,8 +165,8 @@ class AdminAuthController extends Controller
             }
 
             if ($role === 'councilor') {
-                // ensure you have a route named 'councilor.dashboard'
-                return redirect()->route('councilor.dashboard');
+                // redirect approved councilor to the frontend page that mounts Dashboard.jsx
+                return redirect()->to('/dashboard');
             }
 
             // default -> user dashboard (fallback to URL if route name not present)
